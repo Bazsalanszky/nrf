@@ -15,16 +15,53 @@ import (
 	"github.com/omec-project/nrf/logger"
 )
 
-// Ipv6ToInt - Convert Ipv6 string to *bigInt
+// Ipv6ToInt - Convert an IPv6 prefix or address to *big.Int. ipv6 is either
+// an Ipv6Prefix (TS 29.571: "2001:db8:abcd::/48"), which is what the
+// ue-ipv6-prefix discovery parameter and the start and end of an
+// Ipv6PrefixRange carry, or a bare IPv6 address. A prefix converts to its
+// network address, a bare address to itself. A value that is neither is
+// logged and converts to 0.
 func Ipv6ToInt(ipv6 string) *big.Int {
-	ipv6 = ipv6 + "/32"
-	ip, _, err := net.ParseCIDR(ipv6)
+	addr, err := parseIpv6PrefixOrAddr(ipv6)
 	if err != nil {
-		logger.UtilLog.Errorln("error", ip, err)
+		logger.UtilLog.Errorln("error", ipv6, err)
+		return big.NewInt(0)
 	}
-	IPv6Int := big.NewInt(0)
-	IPv6Int.SetBytes(ip)
-	return IPv6Int
+	b := addr.As16()
+	return new(big.Int).SetBytes(b[:])
+}
+
+// ipv6RangeKeyDigits is the number of decimal digits of the largest IPv6
+// value, 2^128-1 (340282366920938463463374607431768211455).
+const ipv6RangeKeyDigits = 39
+
+// Ipv6ToRangeKey - Convert an IPv6 prefix or address (see Ipv6ToInt) to the
+// decimal string the NRF stores for the bounds of an Ipv6PrefixRange and
+// compares them with. The string is zero-padded to a fixed width, so that
+// MongoDB's string comparison ($lte / $gte) orders keys like the addresses.
+// Unpadded, 2001:db8:: ("42540766411282592856903984951653826560", 38
+// digits) sorts after fc00:: ("334965454937798799971759379190646833152",
+// 39 digits). EncodeGroupId uses the same technique. The padded string still
+// parses with big.Int.SetString, so the discovery response converts it back
+// unchanged.
+func Ipv6ToRangeKey(ipv6 string) string {
+	return fmt.Sprintf("%0*d", ipv6RangeKeyDigits, Ipv6ToInt(ipv6))
+}
+
+// parseIpv6PrefixOrAddr parses an Ipv6Prefix into its network address, or a
+// bare address into itself. The previous implementation appended "/32" to the
+// value before net.ParseCIDR, so an Ipv6Prefix, which already has a length,
+// failed to parse and every prefix converted to 0.
+func parseIpv6PrefixOrAddr(s string) (netip.Addr, error) {
+	s = strings.TrimSpace(s)
+	if strings.Contains(s, "/") {
+		prefix, err := netip.ParsePrefix(s)
+		if err != nil {
+			return netip.Addr{}, err
+		}
+		return prefix.Masked().Addr(), nil
+	}
+	return netip.ParseAddr(s)
 }
 
 // Ipv4ToInt - Convert Ipv4 string to int64
