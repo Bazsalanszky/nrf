@@ -1989,17 +1989,17 @@ func handleUeIpv6Prefix(queryParameters url.Values, filter bson.M, targetNfType 
 		var ueIpv6PrefixFilter bson.M
 		if targetNfType == nfTypeBSF {
 			ueIpv6Prefix := queryParameters[queryParamUeIpv6Prefix][0]
-			ueIpv6PrefixNumber := context.Ipv6ToInt(ueIpv6Prefix)
+			ueIpv6PrefixKey := context.Ipv6ToRangeKey(ueIpv6Prefix)
 			ueIpv6PrefixFilter = bson.M{
 				mongoOpOr: []bson.M{
 					{
 						fieldBsfInfoIpv6PrefixRanges: bson.M{
 							mongoOpElemMatch: bson.M{
 								fieldStart: bson.M{
-									mongoOpLte: ueIpv6PrefixNumber.String(),
+									mongoOpLte: ueIpv6PrefixKey,
 								},
 								fieldEnd: bson.M{
-									mongoOpGte: ueIpv6PrefixNumber.String(),
+									mongoOpGte: ueIpv6PrefixKey,
 								},
 							},
 						},
@@ -3176,15 +3176,15 @@ func addIpv6PrefixFilter(queryParameters map[string]*AtomElem, filter bson.M, lo
 		var ueIpv6PrefixFilter bson.M
 		if targetNfType == nfTypeBSF {
 			ueIpv6Prefix := queryParameters[queryParamUeIpv6Prefix].value
-			ueIpv6PrefixNumber := context.Ipv6ToInt(ueIpv6Prefix)
+			ueIpv6PrefixKey := context.Ipv6ToRangeKey(ueIpv6Prefix)
 			ueIpv6PrefixFilter = bson.M{
 				fieldBsfInfoIpv6PrefixRanges: bson.M{
 					mongoOpElemMatch: bson.M{
 						fieldStart: bson.M{
-							mongoOpLte: ueIpv6PrefixNumber.String(),
+							mongoOpLte: ueIpv6PrefixKey,
 						},
 						fieldEnd: bson.M{
-							mongoOpGte: ueIpv6PrefixNumber.String(),
+							mongoOpGte: ueIpv6PrefixKey,
 						},
 					},
 				},
