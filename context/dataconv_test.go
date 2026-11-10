@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/omec-project/openapi/v2/models"
 )
 
 const (
@@ -121,5 +123,65 @@ func TestIpv4ToIntDecimalOrderIsNumeric(t *testing.T) {
 	}
 	if !sort.StringsAreSorted(keys) {
 		t.Fatalf("decimal strings of numerically ordered addresses are not ordered as strings: %v", keys)
+	}
+}
+
+// TestIpv6ToRangeKeyOrdersLikeAddresses checks that comparing range keys as
+// strings, as MongoDB's $lte / $gte do, orders them like the addresses,
+// including across the lengths of their decimal forms (1, 38 and 39 digits
+// below), which the unpadded decimal string did not.
+func TestIpv6ToRangeKeyOrdersLikeAddresses(t *testing.T) {
+	// In ascending numeric order.
+	prefixes := []string{
+		"::/0", tAddrLoopback, "::ffff:10.0.0.1", "700::/8", "2001:db8::/32", tPrefix48,
+		"2001:db8:abcd:12::/64", "3fff:ffff::/32", "4b3b::/16", "fc00::/7", tPrefixULA,
+		tAddrMax,
+	}
+	keys := make([]string, len(prefixes))
+	unpadded := make([]string, len(prefixes))
+	for i, p := range prefixes {
+		keys[i] = Ipv6ToRangeKey(p)
+		unpadded[i] = Ipv6ToInt(p).String()
+		if len(keys[i]) != ipv6RangeKeyDigits {
+			t.Fatalf("Ipv6ToRangeKey(%q) = %q has %d digits, want %d", p, keys[i], len(keys[i]), ipv6RangeKeyDigits)
+		}
+		back, ok := new(big.Int).SetString(keys[i], 10)
+		if !ok || back.Cmp(Ipv6ToInt(p)) != 0 {
+			t.Fatalf("SetString(Ipv6ToRangeKey(%q)) = %v, %v; want %s", p, back, ok, Ipv6ToInt(p))
+		}
+		if i > 0 && Ipv6ToInt(prefixes[i-1]).Cmp(Ipv6ToInt(p)) >= 0 {
+			t.Fatalf("test table is not in ascending order at %q", p)
+		}
+	}
+	if !sort.StringsAreSorted(keys) {
+		t.Fatalf("range keys of ascending prefixes are not in ascending string order: %v", keys)
+	}
+	if sort.StringsAreSorted(unpadded) {
+		t.Fatalf("the unpadded decimal strings sort correctly, so this table does not show the bug: %v", unpadded)
+	}
+	if got := Ipv6ToRangeKey("2001:db8::/32"); got != "042540766411282592856903984951653826560" {
+		t.Fatalf("Ipv6ToRangeKey(2001:db8::/32) = %q", got)
+	}
+}
+
+func TestCopyBsfInfoStoresIpv6RangeKeys(t *testing.T) {
+	var profile models.NFProfile
+	bsfInfo := models.NewBsfInfo()
+	bsfInfo.SetIpv6PrefixRanges([]models.Ipv6PrefixRange{
+		*models.NewIpv6PrefixRange("2001:db8::/32", "2001:db8:ffff::/48"),
+		*models.NewIpv6PrefixRange("fd00::/8", "fdff:ffff::/32"),
+	})
+	profile.SetBsfInfo(*bsfInfo)
+
+	var nf models.NFProfile
+	copyBsfInfo(&nf, profile)
+	got := nf.BsfInfo.GetIpv6PrefixRanges()
+	want := []string{
+		Ipv6ToRangeKey(tAddrDoc), Ipv6ToRangeKey("2001:db8:ffff::"),
+		Ipv6ToRangeKey("fd00::"), Ipv6ToRangeKey("fdff:ffff::"),
+	}
+	if len(got) != 2 || got[0].GetStart() != want[0] || got[0].GetEnd() != want[1] ||
+		got[1].GetStart() != want[2] || got[1].GetEnd() != want[3] {
+		t.Fatalf("stored ranges = %+v, want bounds %v", got, want)
 	}
 }

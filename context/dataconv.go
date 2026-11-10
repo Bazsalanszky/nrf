@@ -31,6 +31,23 @@ func Ipv6ToInt(ipv6 string) *big.Int {
 	return new(big.Int).SetBytes(b[:])
 }
 
+// ipv6RangeKeyDigits is the number of decimal digits of the largest IPv6
+// value, 2^128-1 (340282366920938463463374607431768211455).
+const ipv6RangeKeyDigits = 39
+
+// Ipv6ToRangeKey - Convert an IPv6 prefix or address (see Ipv6ToInt) to the
+// decimal string the NRF stores for the bounds of an Ipv6PrefixRange and
+// compares them with. The string is zero-padded to a fixed width, so that
+// MongoDB's string comparison ($lte / $gte) orders keys like the addresses.
+// Unpadded, 2001:db8:: ("42540766411282592856903984951653826560", 38
+// digits) sorts after fc00:: ("334965454937798799971759379190646833152",
+// 39 digits). EncodeGroupId uses the same technique. The padded string still
+// parses with big.Int.SetString, so the discovery response converts it back
+// unchanged.
+func Ipv6ToRangeKey(ipv6 string) string {
+	return fmt.Sprintf("%0*d", ipv6RangeKeyDigits, Ipv6ToInt(ipv6))
+}
+
 // parseIpv6PrefixOrAddr parses an Ipv6Prefix into its network address, or a
 // bare address into itself. The previous implementation appended "/32" to the
 // value before net.ParseCIDR, so an Ipv6Prefix, which already has a length,

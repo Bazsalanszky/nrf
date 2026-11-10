@@ -681,8 +681,8 @@ func copyBsfInfo(nf *models.NFProfile, nfprofile models.NFProfile) {
 		if ipv6PrefixRanges, ok := nfprofile.BsfInfo.GetIpv6PrefixRangesOk(); ok {
 			b := make([]models.Ipv6PrefixRange, len(ipv6PrefixRanges))
 			for i, rang := range ipv6PrefixRanges {
-				b[i].SetStart(Ipv6ToInt(rang.GetStart()).String())
-				b[i].SetEnd(Ipv6ToInt(rang.GetEnd()).String())
+				b[i].SetStart(Ipv6ToRangeKey(rang.GetStart()))
+				b[i].SetEnd(Ipv6ToRangeKey(rang.GetEnd()))
 			}
 			a.SetIpv6PrefixRanges(b)
 		}
