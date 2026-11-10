@@ -13,6 +13,7 @@ import (
 	"github.com/omec-project/nrf/factory"
 	"github.com/omec-project/nrf/logger"
 	"github.com/omec-project/openapi/v2/models"
+	openapiutils "github.com/omec-project/openapi/v2/utils"
 )
 
 var NrfNfProfile models.NFProfile
@@ -25,6 +26,8 @@ func InitNrfContext() {
 	NrfNfProfile.SetNfInstanceId(uuid.New().String())
 	NrfNfProfile.SetNfType(models.NFTYPE_NRF)
 	NrfNfProfile.SetNfStatus(models.NFSTATUS_REGISTERED)
+	addrs := config.GetSbiRegisterAddrs()
+	openapiutils.SetNFProfileAddresses(&NrfNfProfile, addrs.FQDN, addrs.IPv4, addrs.IPv6)
 
 	nfServices := initNFService(configuration.ServiceNameList, config.Info.Version)
 	NrfNfProfile.SetNfServices(nfServices)
@@ -42,10 +45,11 @@ func InitNrfContext() {
 func initNFService(srvNameList []string, version string) []models.NFService {
 	tmpVersion := strings.Split(version, ".")
 	nfServices := make([]models.NFService, len(srvNameList))
-	ipEndPoint := models.NewIpEndPoint()
-	ipEndPoint.SetIpv4Address(factory.NrfConfig.GetSbiRegisterIP())
-	ipEndPoint.SetTransport(models.TRANSPORTPROTOCOL_TCP)
-	ipEndPoint.SetPort(int32(factory.NrfConfig.GetSbiPort()))
+	// One IpEndPoint per address family (TS 29.510 allows only one of
+	// ipv4Address and ipv6Address per endpoint), IPv4 first; only the port
+	// when the NRF is addressed by host name, which goes into the fqdn.
+	addrs := factory.NrfConfig.GetSbiRegisterAddrs()
+	port := int32(factory.NrfConfig.GetSbiPort())
 	scheme := models.UriScheme(factory.NrfConfig.GetSbiScheme())
 	apiPrefix := factory.NrfConfig.GetSbiUri()
 	nfServiceVersion := models.NewNFServiceVersion("v"+tmpVersion[0], version)
@@ -53,7 +57,10 @@ func initNFService(srvNameList []string, version string) []models.NFService {
 		serviceName := models.ServiceName(nameString)
 		nfService := models.NewNFService(strconv.Itoa(index), serviceName, []models.NFServiceVersion{*nfServiceVersion}, scheme, models.NFSERVICESTATUS_REGISTERED)
 		nfService.SetApiPrefix(apiPrefix)
-		nfService.SetIpEndPoints([]models.IpEndPoint{*ipEndPoint})
+		nfService.SetIpEndPoints(openapiutils.NewIpEndPoints(addrs.IPv4, addrs.IPv6, port))
+		if addrs.FQDN != "" {
+			nfService.SetFqdn(addrs.FQDN)
+		}
 		nfServices[index] = *nfService
 	}
 	return nfServices
