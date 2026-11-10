@@ -11,6 +11,7 @@
 package factory
 
 import (
+	"net"
 	"os"
 	"strconv"
 
@@ -83,26 +84,35 @@ func (c *Config) GetSbiPort() int {
 }
 
 func (c *Config) GetSbiBindingAddr() string {
-	var bindAddr string
 	if c.Configuration == nil || c.Configuration.Sbi == nil {
-		return "0.0.0.0:" + strconv.Itoa(NRF_DEFAULT_PORT)
+		return sbiHostPort("0.0.0.0", NRF_DEFAULT_PORT)
 	}
+	bindIP := "0.0.0.0"
 	if c.Configuration.Sbi.BindingIPv4 != "" {
 		if bindIPv4 := os.Getenv(c.Configuration.Sbi.BindingIPv4); bindIPv4 != "" {
 			logger.CfgLog.Infof("parsing ServerIPv4 [%s] from ENV Variable", bindIPv4)
-			bindAddr = bindIPv4 + ":"
+			bindIP = bindIPv4
 		} else {
-			bindAddr = c.Configuration.Sbi.BindingIPv4 + ":"
+			bindIP = c.Configuration.Sbi.BindingIPv4
 		}
-	} else {
-		bindAddr = "0.0.0.0:"
 	}
+	port := NRF_DEFAULT_PORT
 	if c.Configuration.Sbi.Port != 0 {
-		bindAddr = bindAddr + strconv.Itoa(c.Configuration.Sbi.Port)
-	} else {
-		bindAddr = bindAddr + strconv.Itoa(NRF_DEFAULT_PORT)
+		port = c.Configuration.Sbi.Port
 	}
-	return bindAddr
+	return sbiHostPort(bindIP, port)
+}
+
+// sbiHostPort joins the SBI binding host and port. net.JoinHostPort brackets an
+// IPv6 literal ("[::]:29510"); the previous string concatenation did not, so an
+// IPv6 bindingIPv4 failed with "too many colons in address". IPv4 addresses,
+// hostnames and an empty host give the same string as before. A host that is
+// already bracketed is unwrapped first so it is not bracketed twice.
+func sbiHostPort(host string, port int) string {
+	if len(host) > 1 && host[0] == '[' && host[len(host)-1] == ']' {
+		host = host[1 : len(host)-1]
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 func (c *Config) GetSbiRegisterIP() string {
