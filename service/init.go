@@ -74,6 +74,7 @@ func (nrf *NRF) Initialize(c *cli.Command) error {
 	}
 
 	factory.NrfConfig.CfgLocation = absPath
+	factory.NrfConfig.LogSbiAddressWarnings()
 
 	context.InitNrfContext()
 
